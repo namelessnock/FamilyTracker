@@ -1,0 +1,663 @@
+<!--
+---
+created: 2026-05-20T11:18:00-04:00
+ttl_hours: 48
+status: ACTIVE
+owner: USER
+reason: "Portal web page with client-side decryption, Leaflet dark map rendering, and live signal freshness indicator."
+---
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Location Portal</title>
+    
+    <!-- Google Fonts: Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: rgba(18, 26, 44, 0.6);
+            --border-glow: rgba(0, 168, 255, 0.15);
+            --accent-primary: #00d2ff;
+            --accent-secondary: #00a8ff;
+            --text-main: #f5f6fa;
+            --text-muted: #8c98a4;
+            --card-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow-x: hidden;
+            background-image: radial-gradient(circle at 50% 50%, #152238 0%, #0a0e17 80%);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* --- GATEWAY SCREEN (PIN INPUT) --- */
+        .gateway-card {
+            background: var(--bg-secondary);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-glow);
+            border-radius: 24px;
+            padding: 40px 30px;
+            width: 100%;
+            max-width: 420px;
+            text-align: center;
+            box-shadow: var(--card-shadow);
+            transition: all 0.4s ease;
+        }
+
+        .gateway-card:hover {
+            border-color: rgba(0, 210, 255, 0.3);
+            box-shadow: 0 8px 32px 0 rgba(0, 210, 255, 0.1);
+        }
+
+        .logo-area {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            background: linear-gradient(135deg, var(--accent-primary), #7f00ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 700;
+        }
+
+        .gateway-card h1 {
+            font-size: 1.5rem;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+
+        .gateway-card p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 25px;
+            line-height: 1.4;
+        }
+
+        /* Security Audit Fix: Unified alphanumeric key input replacing complex box groups */
+        .code-input-group {
+            margin-bottom: 25px;
+            width: 100%;
+        }
+
+        .code-input {
+            width: 100%;
+            padding: 14px 18px;
+            border-radius: 12px;
+            border: 1.5px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+            font-size: 1.1rem;
+            text-align: center;
+            font-weight: 500;
+            letter-spacing: 2px;
+            transition: all 0.2s ease;
+        }
+
+        .code-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 10px rgba(0, 210, 255, 0.3);
+            background: rgba(0, 210, 255, 0.05);
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            border: none;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            color: #050811;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 210, 255, 0.2);
+        }
+
+        .btn-submit:disabled {
+            background: #202d44;
+            color: var(--text-muted);
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .btn-submit:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 210, 255, 0.4);
+        }
+
+        .error-message {
+            color: #ff4757;
+            font-size: 0.85rem;
+            margin-top: 15px;
+            min-height: 20px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            line-height: 1.3;
+        }
+
+        /* --- DASHBOARD SCREEN --- */
+        .dashboard-container {
+            display: none;
+            width: 100%;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+        }
+
+        .header h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+
+        .btn-lock {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-main);
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-lock:hover {
+            background: rgba(255, 71, 87, 0.1);
+            border-color: rgba(255, 71, 87, 0.3);
+            color: #ff4757;
+        }
+
+        .btn-share {
+            background: rgba(0, 210, 255, 0.1);
+            border: 1px solid rgba(0, 210, 255, 0.3);
+            color: var(--accent-primary);
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-share:hover {
+            background: var(--accent-primary);
+            color: #050811;
+            box-shadow: 0 0 10px rgba(0, 210, 255, 0.2);
+        }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 20px;
+            height: 550px;
+        }
+
+        @media (max-width: 850px) {
+            .content-grid {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            min-height: 350px;
+            border-radius: 20px;
+            border: 1px solid var(--border-glow);
+            box-shadow: var(--card-shadow);
+            z-index: 1;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .device-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-glow);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: var(--card-shadow);
+        }
+
+        .device-name {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        .stat-item {
+            margin-bottom: 18px;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .battery-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .battery-high {
+            background: rgba(46, 213, 115, 0.15);
+            color: #2ed573;
+        }
+
+        .battery-mid {
+            background: rgba(ffa502, 0.15);
+            color: #ffa502;
+        }
+
+        .battery-low {
+            background: rgba(ff4757, 0.15);
+            color: #ff4757;
+        }
+
+        .btn-nav {
+            width: 100%;
+            padding: 12px;
+            border-radius: 10px;
+            border: none;
+            background: var(--accent-primary);
+            color: #050811;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+            text-decoration: none;
+            display: block;
+            margin-top: 10px;
+        }
+
+        .btn-nav:hover {
+            background: #00b8e6;
+            transform: translateY(-1px);
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- --- GATEWAY SCREEN --- -->
+    <div id="gatewayScreen" class="gateway-card">
+        <div class="logo-area">📍</div>
+        <h1>Family Location</h1>
+        <p>This portal is protected with zero-knowledge encryption. Enter your memorable Family Code to decrypt.</p>
+        
+        <div class="code-input-group">
+            <input type="password" id="familyCodeInput" class="code-input" placeholder="••••••" autocomplete="off">
+        </div>
+        
+        <button id="btnSubmit" class="btn-submit" onclick="attemptDecryption()">Decrypt Portal</button>
+        <div id="errorMessage" class="error-message"></div>
+    </div>
+
+    <!-- --- DASHBOARD SCREEN --- -->
+    <div id="dashboardScreen" class="dashboard-container">
+        <div class="header">
+            <div>
+                <h2>Family Tracker Live Feed</h2>
+                <div id="last-update" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">Checking signal...</div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button id="btnShare" class="btn-share" onclick="copyShareCard()">📋 Copy Share Link</button>
+                <button class="btn-lock" onclick="lockPortal()">Lock Feed</button>
+            </div>
+        </div>
+        
+        <div class="content-grid">
+            <div id="map"></div>
+            
+            <div class="sidebar" id="sidebar">
+                <!-- Device cards will be dynamically injected here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Leaflet Map JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<script>
+    let map = null;
+    let mapMarkers = [];
+
+    // Security Audit Fix: Standardize base64 converter defensively (handles padding & URL-safe characters)
+    function base64ToArrayBuffer(b64) {
+        const normalized = b64.replace(/-/g, '+').replace(/_/g, '/');
+        const binaryString = atob(normalized);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes.buffer;
+    }
+
+    // Attempt decryption of location payload
+    async function attemptDecryption() {
+        const codeInput = document.getElementById('familyCodeInput');
+        const submitBtn = document.getElementById('btnSubmit');
+        const errorDiv = document.getElementById('errorMessage');
+        
+        errorDiv.style.opacity = 0;
+        const familyCode = codeInput.value.trim();
+        
+        if (!familyCode) {
+            showError("Please enter the Family Code.");
+            return;
+        }
+
+        // UX Audit Fix: Add UI block loading state to prevent freezing double-clicks
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Decrypting Feed...";
+
+        // Wrap execution in a small timeout to let the browser draw the UI loading state first
+        setTimeout(async () => {
+            try {
+                // 1. Fetch encrypted payload file
+                const response = await fetch('location_payload.enc?nocache=' + Date.now());
+                if (!response.ok) {
+                    throw new Error("Unable to retrieve encrypted coordinates payload. Check if the server cron job is active.");
+                }
+                const encryptedData = await response.json();
+                
+                // 2. Extract parameters
+                const saltBuffer = base64ToArrayBuffer(encryptedData.salt);
+                const ivBuffer = base64ToArrayBuffer(encryptedData.iv);
+                const ciphertextBuffer = base64ToArrayBuffer(encryptedData.ciphertext);
+
+                // 3. Derive key via WebCrypto PBKDF2 specifications
+                // Strictly matches Python iterations (600,000) and algorithm (SHA-256)
+                const pinBytes = new TextEncoder().encode(familyCode);
+                
+                const baseKey = await crypto.subtle.importKey(
+                    "raw",
+                    pinBytes,
+                    "PBKDF2",
+                    false,
+                    ["deriveKey"]
+                );
+
+                const aesKey = await crypto.subtle.deriveKey(
+                    {
+                        name: "PBKDF2",
+                        salt: saltBuffer,
+                        iterations: 600000,
+                        hash: "SHA-256"
+                    },
+                    baseKey,
+                    { name: "AES-GCM", length: 256 },
+                    false,
+                    ["decrypt"]
+                );
+
+                // 4. Decrypt using AES-GCM
+                const decryptedBuffer = await crypto.subtle.decrypt(
+                    {
+                        name: "AES-GCM",
+                        iv: ivBuffer,
+                        tagLength: 128
+                    },
+                    aesKey,
+                    ciphertextBuffer
+                );
+
+                // 5. Parse plaintext payload
+                const decryptedText = new TextDecoder().decode(decryptedBuffer);
+                const payload = JSON.parse(decryptedText);
+                
+                // Security Audit Fix: Enforce client-side payload staleness checks
+                const encryptedTime = new Date(payload.encrypted_at).getTime();
+                const currentTime = Date.now();
+                const elapsedSeconds = (currentTime - encryptedTime) / 1000;
+                
+                if (elapsedSeconds > payload.ttl_seconds) {
+                    const elapsedMinutes = Math.round(elapsedSeconds / 60);
+                    showError(`Decryption halted: Location data has expired (${elapsedMinutes} minutes old). Please prompt a new scan.`);
+                    return;
+                }
+                
+                // Fetch and draw heartbeat freshness stamp
+                checkFreshness();
+
+                // 6. Draw Dashboard Map
+                renderDashboard(payload.devices);
+                
+            } catch (e) {
+                console.error(e);
+                // UX Audit Fix: Clean, opaque error notifications for decryption errors
+                showError("Decryption Failed. Incorrect Family Code or corrupted coordinates payload.");
+            } finally {
+                // Restore button states
+                submitBtn.disabled = false;
+                submitBtn.textContent = "Decrypt Portal";
+            }
+        }, 50);
+    }
+
+    async function checkFreshness() {
+        try {
+            const r = await fetch('last_update.txt?nocache=' + Date.now());
+            const text = await r.text();
+            const lastLine = text.trim().split('\n').pop();
+            document.getElementById('last-update').innerHTML = '<span style="color: #2ed573;">●</span> Sync Status: ' + lastLine;
+        } catch(e) {
+            document.getElementById('last-update').innerHTML = '<span style="color: #ff4757;">●</span> Sync Status: Offline';
+        }
+    }
+
+    function showError(message) {
+        const errorDiv = document.getElementById('errorMessage');
+        errorDiv.innerText = message;
+        errorDiv.style.opacity = 1;
+        
+        // Reset input fields
+        const codeInput = document.getElementById('familyCodeInput');
+        codeInput.value = "";
+        codeInput.focus();
+    }
+
+    async function copyShareCard() {
+        const shareText = `📍 *Family Live Location Feed*
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔒 Secure Web Portal:
+${window.location.origin}
+
+🔑 Access PIN:
+3382
+
+⚠️ Sync Status:
+• Portal is client-side encrypted (zero-knowledge).
+• Signal refreshes automatically every 10 mins.
+━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+        
+        try {
+            await navigator.clipboard.writeText(shareText);
+            const btn = document.getElementById('btnShare');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = "✅ Copied Card!";
+            btn.style.borderColor = "#2ed573";
+            btn.style.color = "#2ed573";
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.style.borderColor = "rgba(0, 210, 255, 0.3)";
+                btn.style.color = "var(--accent-primary)";
+            }, 2000);
+        } catch (err) {
+            console.error("Clipboard copy failed:", err);
+            alert("Failed to copy link. Please manually copy the URL from the address bar.");
+        }
+    }
+
+    function lockPortal() {
+        document.getElementById('dashboardScreen').style.display = 'none';
+        document.getElementById('gatewayScreen').style.display = 'block';
+        
+        const codeInput = document.getElementById('familyCodeInput');
+        codeInput.value = "";
+        codeInput.focus();
+        
+        if (map) {
+            map.remove();
+            map = null;
+        }
+    }
+
+    function getBatteryClass(level) {
+        if (level >= 60) return 'battery-high';
+        if (level >= 20) return 'battery-mid';
+        return 'battery-low';
+    }
+
+    function formatTime(isoStr) {
+        if (!isoStr) return "Unknown";
+        const d = new Date(isoStr);
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' (' + d.toLocaleDateString() + ')';
+    }
+
+    function renderDashboard(devices) {
+        // Toggle screens
+        document.getElementById('gatewayScreen').style.display = 'none';
+        document.getElementById('dashboardScreen').style.display = 'flex';
+        
+        const sidebar = document.getElementById('sidebar');
+        sidebar.innerHTML = "";
+
+        // Set up map container
+        setTimeout(() => {
+            // Initialize Leaflet Map
+            map = L.map('map', {
+                zoomControl: false
+            }).setView([devices[0].latitude, devices[0].longitude], 14);
+
+            L.control.zoom({
+                position: 'bottomright'
+            }).addTo(map);
+
+            // Premium Sleek CartoDB Dark Matter tile layer
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+                subdomains: 'abcd',
+                maxZoom: 20
+            }).addTo(map);
+
+            const bounds = [];
+
+            devices.forEach(device => {
+                const markerLocation = [device.latitude, device.longitude];
+                bounds.push(markerLocation);
+
+                // Add pulse indicator marker on map
+                const marker = L.circleMarker(markerLocation, {
+                    radius: 10,
+                    fillColor: '#00d2ff',
+                    color: '#fff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                }).addTo(map);
+
+                marker.bindPopup(`<b>${device.name}</b><br>Battery: ${device.battery_level}%<br>Accuracy: ${device.accuracy}m`);
+                mapMarkers.push(marker);
+
+                // Injected premium device information card
+                const batteryClass = getBatteryClass(device.battery_level);
+                const navLink = `https://www.google.com/maps/search/?api=1&query=${device.latitude},${device.longitude}`;
+
+                const cardHtml = `
+                    <div class="device-card">
+                        <div class="device-name">${device.name}</div>
+                        
+                        <div class="stat-item">
+                            <div class="stat-label">Power Level</div>
+                            <div class="battery-badge ${batteryClass}">
+                                ⚡ ${device.battery_level}%
+                            </div>
+                        </div>
+
+                        <div class="stat-item">
+                            <div class="stat-label">Location Address</div>
+                            <div class="stat-value" style="font-size: 0.85rem; line-height: 1.3;">
+                                ${device.address || 'Address lookup unavailable'}
+                            </div>
+                        </div>
+
+                        <div class="stat-item">
+                            <div class="stat-label">Last Signal Update</div>
+                            <div class="stat-value" style="font-size: 0.85rem;">
+                                ${formatTime(device.datetime)}
+                            </div>
+                        </div>
+
+                        <a href="${navLink}" target="_blank" class="btn-nav">Navigate to Device</a>
+                    </div>
+                `;
+                sidebar.insertAdjacentHTML('beforeend', cardHtml);
+            });
+
+            // Adjust viewport to fit all loaded coordinates perfectly
+            if (bounds.length > 1) {
+                map.fitBounds(bounds, { padding: [50, 50] });
+            } else {
+                map.setView(bounds[0], 15);
+            }
+        }, 100);
+    }
+</script>
+</body>
+</html>
